@@ -1,0 +1,1761 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard Monitoring Sample Room — Garment Production Tracker</title>
+
+  <!-- Google Fonts: Inter & JetBrains Mono untuk keterbacaan angka dan kode style -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              900: '#1e1b4b',
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- Chart.js CDN untuk visualisasi distribusi tahapan & status -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+  <!-- SheetJS (xlsx) CDN untuk fitur export laporan ke format Excel (.xlsx) -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
+  <style>
+    /* Pengaturan dasar scrollbar dan transisi halus */
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+    /* Animasi masuk modal dan toast */
+    @keyframes modalFadeIn {
+      from { opacity: 0; transform: scale(0.96) translateY(8px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .animate-modal {
+      animation: modalFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes toastSlideIn {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-toast {
+      animation: toastSlideIn 0.25s ease-out forwards;
+    }
+    /* Custom scrollbar untuk tabel responsif */
+    .table-scroll::-webkit-scrollbar {
+      height: 8px;
+      width: 8px;
+    }
+    .table-scroll::-webkit-scrollbar-track {
+      background: #f1f5f9;
+      border-radius: 9999px;
+    }
+    .table-scroll::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    .table-scroll::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-indigo-100 selection:text-indigo-900">
+
+  <!-- ===================================================================== -->
+  <!-- HEADER & NAVIGASI CEPAT                                               -->
+  <!-- ===================================================================== -->
+  <header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <!-- Brand & Judul Dashboard -->
+        <div class="flex items-start sm:items-center gap-3.5">
+          <div class="w-11 h-11 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-sm shadow-indigo-200 shrink-0">
+            <!-- Icon Garment / Needle & Chart -->
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+            </svg>
+          </div>
+          <div>
+            <div class="flex flex-wrap items-center gap-2">
+              <h1 class="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+                Dashboard Monitoring Sample Room
+              </h1>
+              <span id="liveDateBadge" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                Memuat tanggal...
+              </span>
+            </div>
+            <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
+              Pelacakan Progress Cutting hingga Quality Approved &amp; Jadwal Ekspor
+            </p>
+          </div>
+        </div>
+
+        <!-- Tombol Aksi Utama -->
+        <div class="flex flex-wrap items-center gap-2.5">
+          <!-- Tombol Input Cutting (5%) -->
+          <button
+            type="button"
+            onclick="openCuttingModal()"
+            class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] transition shadow-sm shadow-indigo-200 cursor-pointer"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            <span>+ Input Cutting (5%)</span>
+          </button>
+
+          <!-- Tombol Update Progress Sewing -->
+          <button
+            type="button"
+            onclick="openSewingModal()"
+            class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 active:scale-[0.99] transition cursor-pointer"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span>Update Progress Sewing</span>
+          </button>
+
+          <!-- Tombol Download Excel (.xlsx) -->
+          <button
+            type="button"
+            onclick="exportToExcel()"
+            class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] transition shadow-sm shadow-emerald-200 cursor-pointer"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span>Download Excel (.xlsx)</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===================================================================== -->
+  <!-- KONTEN UTAMA DASHBOARD                                                -->
+  <!-- ===================================================================== -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- ------------------------------------------------------------------- -->
+    <!-- 1. RESUME / KPI CARDS                                               -->
+    <!-- ------------------------------------------------------------------- -->
+    <section aria-label="Ringkasan KPI Sample Room" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <!-- KPI 1: Total Kode Style -->
+      <div class="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-sm hover:shadow-md transition">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Kode Style</span>
+          <div class="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+            </svg>
+          </div>
+        </div>
+        <div class="mt-3 flex items-baseline gap-2">
+          <p id="kpiTotalStyles" class="text-2xl sm:text-3xl font-extrabold text-slate-900 tabular-nums">0 Style</p>
+        </div>
+        <p id="kpiTotalQty" class="mt-1.5 text-xs font-medium text-slate-500 tabular-nums">
+          Total Kuantitas: 0 Pcs Sample
+        </p>
+      </div>
+
+      <!-- KPI 2: Sample Selesai (100% Approved) -->
+      <div class="bg-white rounded-2xl border border-emerald-200/80 p-5 shadow-sm hover:shadow-md transition relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-24 h-24 bg-emerald-50 rounded-bl-full -z-0 opacity-70"></div>
+        <div class="relative z-10">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold uppercase tracking-wider text-emerald-700">Sample Selesai (100%)</span>
+            <div class="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+          </div>
+          <div class="mt-3 flex items-baseline gap-2">
+            <p id="kpiCompletedCount" class="text-2xl sm:text-3xl font-extrabold text-emerald-700 tabular-nums">0 Style</p>
+            <span id="kpiCompletedPct" class="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 tabular-nums">
+              0.0%
+            </span>
+          </div>
+          <p id="kpiCompletedQty" class="mt-1.5 text-xs font-medium text-slate-600 tabular-nums">
+            Quality Approved: 0 Pcs
+          </p>
+        </div>
+      </div>
+
+      <!-- KPI 3: Sample Belum Selesai (<100%) -->
+      <div class="bg-white rounded-2xl border border-amber-200/80 p-5 shadow-sm hover:shadow-md transition relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-24 h-24 bg-amber-50 rounded-bl-full -z-0 opacity-70"></div>
+        <div class="relative z-10">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold uppercase tracking-wider text-amber-700">Belum Selesai (&lt;100%)</span>
+            <div class="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+          </div>
+          <div class="mt-3 flex items-baseline gap-2">
+            <p id="kpiPendingCount" class="text-2xl sm:text-3xl font-extrabold text-amber-700 tabular-nums">0 Style</p>
+            <span id="kpiPendingPct" class="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-bold bg-amber-100 text-amber-800 tabular-nums">
+              0.0%
+            </span>
+          </div>
+          <p id="kpiPendingQty" class="mt-1.5 text-xs font-medium text-slate-600 tabular-nums">
+            Dalam Proses (WIP): 0 Pcs
+          </p>
+        </div>
+      </div>
+
+      <!-- KPI 4: Jadwal Ekspor Terdekat -->
+      <div class="bg-white rounded-2xl border border-indigo-200/90 p-5 shadow-sm hover:shadow-md transition relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-24 h-24 bg-indigo-50 rounded-bl-full -z-0 opacity-80"></div>
+        <div class="relative z-10">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-xs font-semibold uppercase tracking-wider text-indigo-700">Jadwal Ekspor Terdekat</span>
+            <span id="kpiNearestBadge" class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-800">
+              -
+            </span>
+          </div>
+          <div class="mt-2.5">
+            <p id="kpiNearestStyle" class="text-lg sm:text-xl font-extrabold font-mono text-slate-900 truncate">
+              -
+            </p>
+            <p id="kpiNearestDate" class="text-xs font-medium text-slate-500 mt-0.5">
+              Tidak ada jadwal aktif
+            </p>
+          </div>
+          <div class="mt-2.5 flex items-center gap-2">
+            <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div id="kpiNearestProgressBar" class="h-full bg-indigo-600 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+            <span id="kpiNearestProgressText" class="text-xs font-bold text-indigo-700 tabular-nums">0%</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------------------- -->
+    <!-- 2. WORKFLOW TRACKER BANNER & VISUALISASI CHART.JS                   -->
+    <!-- ------------------------------------------------------------------- -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+      <!-- Bar Chart: Distribusi Progress per Tahapan -->
+      <div class="lg:col-span-8 bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+          <div>
+            <h2 class="text-base font-bold text-slate-900">Distribusi Style per Tahapan Produksi</h2>
+            <p class="text-xs text-slate-500">Alur standar: Cutting (5%) → Sewing (10%–70%) → Cek Quality (90%) → Approved (100%)</p>
+          </div>
+          <span class="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg self-start">
+            <span class="w-2 h-2 rounded-full bg-indigo-600"></span> Jumlah Kode Style
+          </span>
+        </div>
+        <div class="relative h-56 sm:h-64 w-full">
+          <canvas id="stageBarChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Doughnut Chart: Rasio Selesai vs Belum Selesai -->
+      <div class="lg:col-span-4 bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between">
+        <div>
+          <h2 class="text-base font-bold text-slate-900">Rasio Status Penyelesaian</h2>
+          <p class="text-xs text-slate-500">Perbandingan Style Selesai (100%) vs Belum Selesai</p>
+        </div>
+        <div class="relative h-48 w-full my-2 flex items-center justify-center">
+          <canvas id="statusDoughnutChart"></canvas>
+          <!-- Center Label pada Doughnut -->
+          <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+            <span id="doughnutCenterPct" class="text-2xl font-extrabold text-slate-900 tabular-nums">0%</span>
+            <span class="text-[11px] font-medium text-slate-500">Approved</span>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
+          <div class="flex items-center gap-2 bg-emerald-50/70 px-3 py-2 rounded-xl">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
+            <div>
+              <div class="text-slate-500">Selesai (100%)</div>
+              <div id="legendCompleted" class="font-bold text-slate-800 tabular-nums">0 Style</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 bg-amber-50/70 px-3 py-2 rounded-xl">
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0"></span>
+            <div>
+              <div class="text-slate-500">Belum (&lt;100%)</div>
+              <div id="legendPending" class="font-bold text-slate-800 tabular-nums">0 Style</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------------------- -->
+    <!-- 3. TABEL UTAMA DAFTAR KODE STYLE, PROGRESS & JADWAL EKSPOR          -->
+    <!-- ------------------------------------------------------------------- -->
+    <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <!-- Toolbar Pencarian, Filter & Urutkan -->
+      <div class="p-5 border-b border-slate-200 space-y-4">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div>
+            <h2 class="text-base sm:text-lg font-bold text-slate-900">Daftar Kode Style &amp; Jadwal Ekspor Sample</h2>
+            <p class="text-xs text-slate-500">Klik tombol <span class="font-semibold text-indigo-600">Update Sewing</span> pada baris style untuk memperbarui tahapan progress secara langsung.</p>
+          </div>
+
+          <div class="flex items-center gap-2 self-start md:self-auto">
+            <span id="tableResultCounter" class="text-xs font-semibold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-xl tabular-nums">
+              Menampilkan 0 data
+            </span>
+            <button
+              type="button"
+              onclick="openResetModal()"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-slate-600 hover:text-rose-700 bg-slate-100 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 transition cursor-pointer"
+              title="Kembalikan data contoh awal"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span>Reset Data Contoh</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Baris Kontrol Filter -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3">
+          <!-- Input Pencarian -->
+          <div class="lg:col-span-5 relative">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              id="searchInput"
+              oninput="renderDashboard()"
+              placeholder="Cari Kode Style, Buyer, atau Deskripsi..."
+              class="w-full pl-10 pr-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition"
+            />
+          </div>
+
+          <!-- Filter Status / Tahapan -->
+          <div class="lg:col-span-4">
+            <select
+              id="filterStageSelect"
+              onchange="renderDashboard()"
+              class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition cursor-pointer"
+            >
+              <option value="ALL">Filter: Semua Status &amp; Tahapan</option>
+              <option value="INCOMPLETE">Belum Selesai (&lt; 100%)</option>
+              <option value="COMPLETED">Selesai (100% Quality Approved)</option>
+              <optgroup label="Filter per Tahapan Spesifik">
+                <option value="5">5% — Cutting</option>
+                <option value="10">10% — Masuk Sewing</option>
+                <option value="30">30% — Jahit Body</option>
+                <option value="50">50% — Secondary Process</option>
+                <option value="70">70% — Jahit Assembly</option>
+                <option value="90">90% — Cek Quality</option>
+                <option value="100">100% — Quality OK &amp; Approved</option>
+              </optgroup>
+            </select>
+          </div>
+
+          <!-- Urutkan Data -->
+          <div class="lg:col-span-3">
+            <select
+              id="sortSelect"
+              onchange="renderDashboard()"
+              class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition cursor-pointer"
+            >
+              <option value="EXPORT_ASC">Urutkan: Jadwal Ekspor Terdekat</option>
+              <option value="PROGRESS_DESC">Urutkan: Progress Tertinggi</option>
+              <option value="PROGRESS_ASC">Urutkan: Progress Terendah</option>
+              <option value="UPDATED_DESC">Urutkan: Update Terbaru</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabel Responsif -->
+      <div class="overflow-x-auto table-scroll">
+        <table class="w-full text-left border-collapse min-w-[980px]">
+          <thead>
+            <tr class="bg-slate-50/90 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              <th class="py-3.5 px-4">Kode Style</th>
+              <th class="py-3.5 px-4">Buyer &amp; Deskripsi Style</th>
+              <th class="py-3.5 px-3 text-right">Qty</th>
+              <th class="py-3.5 px-4">Jadwal Ekspor</th>
+              <th class="py-3.5 px-4">Tahapan Saat Ini</th>
+              <th class="py-3.5 px-4 w-44">Progress</th>
+              <th class="py-3.5 px-3">Status</th>
+              <th class="py-3.5 px-4">Waktu Update</th>
+              <th class="py-3.5 px-4 text-right">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="sampleTableBody" class="divide-y divide-slate-100 text-sm">
+            <!-- Baris tabel dirender oleh JavaScript -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Empty State (Muncul jika tidak ada hasil filter/pencarian) -->
+      <div id="emptyState" class="hidden py-14 px-4 text-center">
+        <div class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 mx-auto flex items-center justify-center mb-3">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <h3 class="text-sm font-bold text-slate-800">Tidak ada data Kode Style yang sesuai</h3>
+        <p class="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+          Coba ubah kata kunci pencarian, atur ulang filter tahapan, atau tambahkan input baru dari bagian Cutting.
+        </p>
+        <button
+          type="button"
+          onclick="resetFilters()"
+          class="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition cursor-pointer"
+        >
+          Reset Pencarian &amp; Filter
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer Ringkas -->
+  <footer class="border-t border-slate-200 bg-white mt-8">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+      <p>Sample Room Monitoring System • Alur Cutting (5%) → Sewing Supervisor (10%–100%)</p>
+      <p>Data tersimpan otomatis di browser (LocalStorage)</p>
+    </div>
+  </footer>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL 1: INPUT BAGIAN CUTTING (5%)                                    -->
+  <!-- ===================================================================== -->
+  <div id="cuttingModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+    <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-modal">
+      <!-- Header Modal -->
+      <div class="px-6 py-4 bg-indigo-600 text-white flex items-center justify-between">
+        <div>
+          <span class="inline-block text-[11px] font-bold uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-md mb-1">
+            Tahap Awal • Progress Otomatis 5%
+          </span>
+          <h3 class="text-lg font-bold">Input Data Bagian Cutting</h3>
+        </div>
+        <button type="button" onclick="closeModal('cuttingModal')" class="p-1.5 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition cursor-pointer">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Form Cutting -->
+      <form id="cuttingForm" onsubmit="handleCuttingSubmit(event)" class="p-6 space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <!-- Kode Style -->
+          <div>
+            <label for="cutStyleCode" class="block text-xs font-bold text-slate-700 mb-1">
+              Kode Style <span class="text-rose-500">*</span>
+            </label>
+            <input
+              type="text"
+              id="cutStyleCode"
+              required
+              placeholder="Contoh: STY-2026-09"
+              class="w-full px-3.5 py-2.5 text-sm font-mono uppercase bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+            />
+            <p id="cutStyleError" class="hidden text-xs text-rose-600 font-medium mt-1">Kode Style sudah terdaftar!</p>
+          </div>
+
+          <!-- Buyer / Brand -->
+          <div>
+            <label for="cutBuyer" class="block text-xs font-bold text-slate-700 mb-1">
+              Buyer / Brand <span class="text-rose-500">*</span>
+            </label>
+            <input
+              type="text"
+              id="cutBuyer"
+              required
+              placeholder="Contoh: UNIQLO / ZARA"
+              class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+            />
+          </div>
+        </div>
+
+        <!-- Deskripsi / Nama Style -->
+        <div>
+          <label for="cutDescription" class="block text-xs font-bold text-slate-700 mb-1">
+            Deskripsi / Nama Style <span class="text-rose-500">*</span>
+          </label>
+          <input
+            type="text"
+            id="cutDescription"
+            required
+            placeholder="Contoh: Men's Lightweight Hooded Parka"
+            class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+          />
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <!-- Qty Sample (pcs) -->
+          <div>
+            <label for="cutQty" class="block text-xs font-bold text-slate-700 mb-1">
+              Qty Sample (Pcs) <span class="text-rose-500">*</span>
+            </label>
+            <input
+              type="number"
+              id="cutQty"
+              min="1"
+              max="9999"
+              required
+              placeholder="Contoh: 12"
+              class="w-full px-3.5 py-2.5 text-sm tabular-nums bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+            />
+          </div>
+
+          <!-- Jadwal Ekspor -->
+          <div>
+            <label for="cutExportDate" class="block text-xs font-bold text-slate-700 mb-1">
+              Jadwal Ekspor Sample <span class="text-rose-500">*</span>
+            </label>
+            <input
+              type="date"
+              id="cutExportDate"
+              required
+              class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+            />
+          </div>
+        </div>
+
+        <!-- Catatan Cutting (Opsional) -->
+        <div>
+          <label for="cutNote" class="block text-xs font-bold text-slate-700 mb-1">
+            Catatan Cutting (Opsional)
+          </label>
+          <input
+            type="text"
+            id="cutNote"
+            placeholder="Contoh: Kain utama & interlining sudah dipotong lengkap"
+            class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+          />
+        </div>
+
+        <!-- Info Box Otomatis 5% -->
+        <div class="p-3 rounded-xl bg-sky-50 border border-sky-200 flex items-center gap-3 text-xs text-sky-900">
+          <span class="px-2 py-1 rounded-lg bg-sky-600 text-white font-bold shrink-0">5%</span>
+          <p>Setelah disimpan, Kode Style akan otomatis muncul di dashboard dengan tahapan <strong>Cutting (5%)</strong> dan siap diproses oleh Sewing Supervisor.</p>
+        </div>
+
+        <!-- Tombol Submit -->
+        <div class="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-100">
+          <button
+            type="button"
+            onclick="closeModal('cuttingModal')"
+            class="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+          >
+            Batal
+          </button>
+          <button
+            type="submit"
+            class="px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm transition cursor-pointer"
+          >
+            Simpan Input Cutting (5%)
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL 2: UPDATE PROGRESS SEWING SUPERVISOR                            -->
+  <!-- ===================================================================== -->
+  <div id="sewingModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+    <div class="bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-modal max-h-[92vh] flex flex-col">
+      <!-- Header Modal -->
+      <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+        <div>
+          <span class="inline-block text-[11px] font-bold uppercase tracking-wider bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 px-2 py-0.5 rounded-md mb-1">
+            Sewing Supervisor Panel
+          </span>
+          <h3 class="text-lg font-bold">Update Progress Produksi Sample</h3>
+        </div>
+        <button type="button" onclick="closeModal('sewingModal')" class="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition cursor-pointer">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Form Sewing -->
+      <form id="sewingForm" onsubmit="handleSewingSubmit(event)" class="p-6 space-y-4 overflow-y-auto">
+        <!-- Pilih Kode Style -->
+        <div>
+          <label for="sewStyleSelect" class="block text-xs font-bold text-slate-700 mb-1">
+            Pilih Kode Style <span class="text-rose-500">*</span>
+          </label>
+          <select
+            id="sewStyleSelect"
+            onchange="onSelectSewingStyle()"
+            required
+            class="w-full px-3.5 py-2.5 text-sm font-medium bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 cursor-pointer"
+          >
+            <!-- Opsi diisi secara dinamis oleh JS -->
+          </select>
+        </div>
+
+        <!-- Ringkasan Info Style Terpilih -->
+        <div id="sewStylePreview" class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
+          <!-- Diisi dinamis oleh JS -->
+        </div>
+
+        <!-- Pilihan Tahapan Progress (5% - 100%) -->
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-2">
+            Pilih Tahapan &amp; Persentase Progress <span class="text-rose-500">*</span>
+          </label>
+          <div id="stageRadioContainer" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <!-- Kartu pilihan tahapan dirender oleh JS -->
+          </div>
+        </div>
+
+        <!-- Catatan Supervisor -->
+        <div>
+          <label for="sewNote" class="block text-xs font-bold text-slate-700 mb-1">
+            Catatan Sewing Supervisor (Opsional)
+          </label>
+          <input
+            type="text"
+            id="sewNote"
+            placeholder="Contoh: Jahit assembly selesai, lanjut inspeksi QC akhir"
+            class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+          />
+        </div>
+
+        <!-- Tombol Submit -->
+        <div class="pt-3 flex items-center justify-end gap-2.5 border-t border-slate-100">
+          <button
+            type="button"
+            onclick="closeModal('sewingModal')"
+            class="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+          >
+            Batal
+          </button>
+          <button
+            type="submit"
+            class="px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm transition cursor-pointer"
+          >
+            Simpan Update Progress
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL 3: KONFIRMASI HAPUS / RESET DATA (PENGGANTI CONFIRM())          -->
+  <!-- ===================================================================== -->
+  <div id="confirmModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+    <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 p-6 animate-modal">
+      <div class="flex items-start gap-3.5">
+        <div class="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </div>
+        <div>
+          <h3 id="confirmTitle" class="text-base font-bold text-slate-900">Konfirmasi Hapus Data</h3>
+          <p id="confirmMessage" class="text-xs sm:text-sm text-slate-600 mt-1">
+            Apakah Anda yakin ingin menghapus data ini?
+          </p>
+        </div>
+      </div>
+
+      <div class="mt-6 flex items-center justify-end gap-2.5">
+        <button
+          type="button"
+          onclick="closeModal('confirmModal')"
+          class="px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+        >
+          Batal
+        </button>
+        <button
+          type="button"
+          id="confirmActionBtn"
+          class="px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 transition cursor-pointer"
+        >
+          Ya, Lanjutkan
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- TOAST NOTIFICATION CONTAINER                                          -->
+  <!-- ===================================================================== -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- ===================================================================== -->
+  <!-- LOGIKA APLIKASI JAVASCRIPT                                            -->
+  <!-- ===================================================================== -->
+  <script>
+    /**
+     * Konstanta Tahapan Produksi Sample Room
+     * Memetakan nilai persentase (5% - 100%) dengan nama tahapan, deskripsi alur, dan warna badge.
+     */
+    const PRODUCTION_STAGES = [
+      {
+        percent: 5,
+        name: 'Cutting',
+        shortName: 'Cutting (5%)',
+        desc: 'Input awal dari bagian Cutting',
+        badgeClass: 'bg-sky-50 text-sky-700 border-sky-200',
+        barClass: 'bg-sky-500',
+        chartColor: '#0ea5e9'
+      },
+      {
+        percent: 10,
+        name: 'Masuk Sewing',
+        shortName: 'Masuk Sewing (10%)',
+        desc: 'Sudah masuk line sewing',
+        badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
+        barClass: 'bg-blue-500',
+        chartColor: '#3b82f6'
+      },
+      {
+        percent: 30,
+        name: 'Jahit Body',
+        shortName: 'Jahit Body (30%)',
+        desc: 'Sudah proses jahit body utama',
+        badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+        barClass: 'bg-indigo-500',
+        chartColor: '#6366f1'
+      },
+      {
+        percent: 50,
+        name: 'Secondary Process',
+        shortName: 'Secondary (50%)',
+        desc: 'Bordir, sablon, washing, atau sublim',
+        badgeClass: 'bg-violet-50 text-violet-700 border-violet-200',
+        barClass: 'bg-violet-500',
+        chartColor: '#8b5cf6'
+      },
+      {
+        percent: 70,
+        name: 'Jahit Assembly',
+        shortName: 'Assembly (70%)',
+        desc: 'Sudah jahit penggabungan komponen',
+        badgeClass: 'bg-amber-50 text-amber-800 border-amber-200',
+        barClass: 'bg-amber-500',
+        chartColor: '#f59e0b'
+      },
+      {
+        percent: 90,
+        name: 'Cek Quality',
+        shortName: 'Cek Quality (90%)',
+        desc: 'Proses inspeksi QC & measurement',
+        badgeClass: 'bg-orange-50 text-orange-800 border-orange-200',
+        barClass: 'bg-orange-500',
+        chartColor: '#f97316'
+      },
+      {
+        percent: 100,
+        name: 'Quality OK & Approved',
+        shortName: 'Approved (100%)',
+        desc: 'Quality OK, approved & siap ekspor',
+        badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        barClass: 'bg-emerald-500',
+        chartColor: '#10b981'
+      }
+    ];
+
+    const STORAGE_KEY = 'garment_sample_room_data_v1';
+    let sampleList = [];
+    let barChartInstance = null;
+    let doughnutChartInstance = null;
+
+    /**
+     * Helper: Mendapatkan metadata tahapan berdasarkan nilai persentase
+     */
+    function getStageInfo(percent) {
+      return PRODUCTION_STAGES.find(s => s.percent === Number(percent)) || PRODUCTION_STAGES[0];
+    }
+
+    /**
+     * Helper: Format tanggal relatif dari hari ini ke string YYYY-MM-DD (untuk seed data)
+     */
+    function getRelativeDateString(offsetDays) {
+      const date = new Date();
+      date.setDate(date.getDate() + offsetDays);
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    /**
+     * Helper: Format waktu sekarang dalam format Indonesia yang rapi
+     */
+    function formatNowTimestamp(offsetMinutes = 0) {
+      const d = new Date(Date.now() - offsetMinutes * 60000);
+      const day = String(d.getDate()).padStart(2, '0');
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+      const month = monthNames[d.getMonth()];
+      const year = d.getFullYear();
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      return `${day} ${month} ${year}, ${hh}:${mm}`;
+    }
+
+    /**
+     * Data Contoh Awal (8 Kode Style dengan variasi tahapan 5% - 100% dan jadwal ekspor realistis)
+     */
+    function createInitialSeedData() {
+      return [
+        {
+          id: 'smp-1',
+          styleCode: 'STY-UQ-2601',
+          buyer: 'UNIQLO',
+          description: "Men's Ultra Light Down Parka",
+          qty: 18,
+          exportDate: getRelativeDateString(1), // Besok (H-1)
+          progress: 90,
+          note: 'Final measurement QC sedang berjalan, menunggu sign-off QA',
+          updatedAt: formatNowTimestamp(25)
+        },
+        {
+          id: 'smp-2',
+          styleCode: 'STY-ZR-2602',
+          buyer: 'ZARA',
+          description: "Women's Double-Breasted Linen Blazer",
+          qty: 15,
+          exportDate: getRelativeDateString(0), // Hari Ini
+          progress: 70,
+          note: 'Jahit assembly lining & pasang kancing selesai hari ini',
+          updatedAt: formatNowTimestamp(45)
+        },
+        {
+          id: 'smp-3',
+          styleCode: 'STY-NK-2603',
+          buyer: 'NIKE',
+          description: 'Dri-FIT Woven Running Track Jacket',
+          qty: 24,
+          exportDate: getRelativeDateString(-2), // Sudah lewat 2 hari & selesai
+          progress: 100,
+          note: 'Quality OK & Approved oleh buyer technician',
+          updatedAt: formatNowTimestamp(310)
+        },
+        {
+          id: 'smp-4',
+          styleCode: 'STY-HM-2604',
+          buyer: 'H&M',
+          description: 'Relaxed Fit Organic Cotton Cargo Pant',
+          qty: 20,
+          exportDate: getRelativeDateString(3), // H-3
+          progress: 50,
+          note: 'Proses enzyme wash & bartack reinforcement di vendor',
+          updatedAt: formatNowTimestamp(90)
+        },
+        {
+          id: 'smp-5',
+          styleCode: 'STY-AD-2605',
+          buyer: 'ADIDAS',
+          description: 'Originals 3-Stripes Windbreaker',
+          qty: 16,
+          exportDate: getRelativeDateString(5), // H-5
+          progress: 30,
+          note: 'Jahit body panel depan & aplikasi rib selesai',
+          updatedAt: formatNowTimestamp(140)
+        },
+        {
+          id: 'smp-6',
+          styleCode: 'STY-MU-2606',
+          buyer: 'MUJI',
+          description: 'Organic French Linen Stand Collar Shirt',
+          qty: 12,
+          exportDate: getRelativeDateString(7), // H-7
+          progress: 10,
+          note: 'Bundle kain sudah diterima line sewing 2',
+          updatedAt: formatNowTimestamp(195)
+        },
+        {
+          id: 'smp-7',
+          styleCode: 'STY-GA-2607',
+          buyer: 'GAP',
+          description: 'Kids Denim Sherpa Trucker Jacket',
+          qty: 14,
+          exportDate: getRelativeDateString(9), // H-9
+          progress: 5,
+          note: 'Baru selesai potong di meja cutting, siap distribusi',
+          updatedAt: formatNowTimestamp(15)
+        },
+        {
+          id: 'smp-8',
+          styleCode: 'STY-LC-2608',
+          buyer: 'LACOSTE',
+          description: 'Classic Piqué Long Sleeve Polo',
+          qty: 22,
+          exportDate: getRelativeDateString(2), // H-2 & sudah 100%
+          progress: 100,
+          note: 'Approved 100%, dokumen packing list ekspor sudah siap',
+          updatedAt: formatNowTimestamp(420)
+        }
+      ];
+    }
+
+    /**
+     * Memuat data dari LocalStorage atau menginisialisasi data contoh
+     */
+    function loadSamples() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            sampleList = parsed;
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Gagal membaca localStorage:', err);
+      }
+      sampleList = createInitialSeedData();
+      saveSamples();
+    }
+
+    /**
+     * Menyimpan state sampleList ke LocalStorage
+     */
+    function saveSamples() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(sampleList));
+      } catch (err) {
+        console.error('Gagal menyimpan ke localStorage:', err);
+      }
+    }
+
+    /**
+     * Kalkulasi selisih hari antara jadwal ekspor (YYYY-MM-DD) dan hari ini
+     */
+    function getExportDateMeta(dateStr, progress) {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const exportDate = new Date(y, m - 1, d);
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      const diffDays = Math.round((exportDate - today) / (1000 * 60 * 60 * 24));
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+      const formattedDate = `${String(d).padStart(2, '0')} ${monthNames[m - 1]} ${y}`;
+
+      if (Number(progress) === 100) {
+        return {
+          diffDays,
+          formattedDate,
+          badgeText: 'Siap / Terkirim',
+          badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200'
+        };
+      }
+
+      if (diffDays < 0) {
+        return {
+          diffDays,
+          formattedDate,
+          badgeText: `Terlewat ${Math.abs(diffDays)} Hari`,
+          badgeClass: 'bg-rose-50 text-rose-700 border-rose-200 font-bold'
+        };
+      }
+      if (diffDays === 0) {
+        return {
+          diffDays,
+          formattedDate,
+          badgeText: 'Hari Ini (H-0)',
+          badgeClass: 'bg-amber-100 text-amber-800 border-amber-300 font-bold'
+        };
+      }
+      if (diffDays <= 3) {
+        return {
+          diffDays,
+          formattedDate,
+          badgeText: `H-${diffDays} (Mendesak)`,
+          badgeClass: 'bg-orange-50 text-orange-700 border-orange-200 font-semibold'
+        };
+      }
+      return {
+        diffDays,
+        formattedDate,
+        badgeText: `H-${diffDays}`,
+        badgeClass: 'bg-slate-100 text-slate-600 border-slate-200'
+      };
+    }
+
+    /**
+     * Memperbarui seluruh komponen UI: KPI Resume, Grafik Chart.js, dan Tabel Utama
+     */
+    function renderDashboard() {
+      updateKpiCards();
+      updateCharts();
+      renderTable();
+    }
+
+    /**
+     * 1. Update Kartu KPI Resume di Bagian Atas
+     */
+    function updateKpiCards() {
+      const totalStyles = sampleList.length;
+      const totalQty = sampleList.reduce((acc, item) => acc + Number(item.qty || 0), 0);
+
+      const completedItems = sampleList.filter(item => Number(item.progress) === 100);
+      const completedCount = completedItems.length;
+      const completedQty = completedItems.reduce((acc, item) => acc + Number(item.qty || 0), 0);
+      const completedPct = totalStyles > 0 ? ((completedCount / totalStyles) * 100).toFixed(1) : '0.0';
+
+      const pendingItems = sampleList.filter(item => Number(item.progress) < 100);
+      const pendingCount = pendingItems.length;
+      const pendingQty = pendingItems.reduce((acc, item) => acc + Number(item.qty || 0), 0);
+      const pendingPct = totalStyles > 0 ? ((pendingCount / totalStyles) * 100).toFixed(1) : '0.0';
+
+      // Update DOM KPI 1, 2, 3
+      document.getElementById('kpiTotalStyles').textContent = `${totalStyles} Style`;
+      document.getElementById('kpiTotalQty').textContent = `Total Kuantitas: ${totalQty.toLocaleString('id-ID')} Pcs Sample`;
+
+      document.getElementById('kpiCompletedCount').textContent = `${completedCount} Style`;
+      document.getElementById('kpiCompletedPct').textContent = `${completedPct}%`;
+      document.getElementById('kpiCompletedQty').textContent = `Quality Approved: ${completedQty.toLocaleString('id-ID')} Pcs`;
+
+      document.getElementById('kpiPendingCount').textContent = `${pendingCount} Style`;
+      document.getElementById('kpiPendingPct').textContent = `${pendingPct}%`;
+      document.getElementById('kpiPendingQty').textContent = `Dalam Proses (WIP): ${pendingQty.toLocaleString('id-ID')} Pcs`;
+
+      // Update KPI 4: Jadwal Ekspor Terdekat (Prioritaskan style yang belum 100%, jika semua 100% ambil yang terdekat secara kalender)
+      const candidates = pendingItems.length > 0 ? pendingItems : sampleList;
+      if (candidates.length === 0) {
+        document.getElementById('kpiNearestStyle').textContent = '-';
+        document.getElementById('kpiNearestDate').textContent = 'Belum ada data style';
+        document.getElementById('kpiNearestBadge').textContent = '-';
+        document.getElementById('kpiNearestProgressBar').style.width = '0%';
+        document.getElementById('kpiNearestProgressText').textContent = '0%';
+        return;
+      }
+
+      const sortedByExport = [...candidates].sort((a, b) => a.exportDate.localeCompare(b.exportDate));
+      const nearest = sortedByExport[0];
+      const dateMeta = getExportDateMeta(nearest.exportDate, nearest.progress);
+
+      document.getElementById('kpiNearestStyle').textContent = `${nearest.styleCode} (${nearest.buyer})`;
+      document.getElementById('kpiNearestDate').textContent = `Ekspor: ${dateMeta.formattedDate} • ${nearest.qty} Pcs`;
+      const badgeEl = document.getElementById('kpiNearestBadge');
+      badgeEl.textContent = dateMeta.badgeText;
+      badgeEl.className = `inline-flex items-center px-2 py-0.5 rounded-full text-[11px] border ${dateMeta.badgeClass}`;
+
+      document.getElementById('kpiNearestProgressBar').style.width = `${nearest.progress}%`;
+      document.getElementById('kpiNearestProgressText').textContent = `${nearest.progress}%`;
+    }
+
+    /**
+     * 2. Update Visualisasi Grafik Chart.js (Bar Chart & Doughnut Chart)
+     */
+    function updateCharts() {
+      const stageCounts = PRODUCTION_STAGES.map(stage =>
+        sampleList.filter(item => Number(item.progress) === stage.percent).length
+      );
+
+      const completedCount = sampleList.filter(item => Number(item.progress) === 100).length;
+      const pendingCount = sampleList.length - completedCount;
+      const completedPct = sampleList.length > 0 ? Math.round((completedCount / sampleList.length) * 100) : 0;
+
+      // Update Label Tengah Doughnut
+      document.getElementById('doughnutCenterPct').textContent = `${completedPct}%`;
+      document.getElementById('legendCompleted').textContent = `${completedCount} Style`;
+      document.getElementById('legendPending').textContent = `${pendingCount} Style`;
+
+      // Inisialisasi / Update Bar Chart
+      const barCtx = document.getElementById('stageBarChart').getContext('2d');
+      if (barChartInstance) {
+        barChartInstance.data.datasets[0].data = stageCounts;
+        barChartInstance.update();
+      } else {
+        barChartInstance = new Chart(barCtx, {
+          type: 'bar',
+          data: {
+            labels: PRODUCTION_STAGES.map(s => s.shortName),
+            datasets: [{
+              label: 'Jumlah Style',
+              data: stageCounts,
+              backgroundColor: PRODUCTION_STAGES.map(s => s.chartColor),
+              borderRadius: 8,
+              maxBarThickness: 42
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: '#0f172a',
+                padding: 10,
+                cornerRadius: 8,
+                callbacks: {
+                  label: (ctx) => ` ${ctx.parsed.y} Kode Style`
+                }
+              }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: {
+                  stepSize: 1,
+                  precision: 0,
+                  color: '#64748b',
+                  font: { size: 11, family: 'Inter' }
+                },
+                grid: { color: '#f1f5f9' }
+              },
+              x: {
+                ticks: {
+                  color: '#475569',
+                  font: { size: 11, weight: '600', family: 'Inter' }
+                },
+                grid: { display: false }
+              }
+            }
+          }
+        });
+      }
+
+      // Inisialisasi / Update Doughnut Chart
+      const doughnutCtx = document.getElementById('statusDoughnutChart').getContext('2d');
+      if (doughnutChartInstance) {
+        doughnutChartInstance.data.datasets[0].data = [completedCount, pendingCount];
+        doughnutChartInstance.update();
+      } else {
+        doughnutChartInstance = new Chart(doughnutCtx, {
+          type: 'doughnut',
+          data: {
+            labels: ['Selesai (100% Approved)', 'Belum Selesai (<100%)'],
+            datasets: [{
+              data: [completedCount, pendingCount],
+              backgroundColor: ['#10b981', '#f59e0b'],
+              borderWidth: 0,
+              hoverOffset: 4
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '72%',
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: '#0f172a',
+                padding: 10,
+                cornerRadius: 8,
+                callbacks: {
+                  label: (ctx) => ` ${ctx.label}: ${ctx.parsed} Style`
+                }
+              }
+            }
+          }
+        });
+      }
+    }
+
+    /**
+     * 3. Render Tabel Utama dengan Fitur Search, Filter & Sort
+     */
+    function renderTable() {
+      const searchQuery = document.getElementById('searchInput').value.trim().toLowerCase();
+      const filterValue = document.getElementById('filterStageSelect').value;
+      const sortValue = document.getElementById('sortSelect').value;
+
+      // Filter data
+      let filtered = sampleList.filter(item => {
+        const matchesSearch =
+          item.styleCode.toLowerCase().includes(searchQuery) ||
+          item.buyer.toLowerCase().includes(searchQuery) ||
+          item.description.toLowerCase().includes(searchQuery);
+
+        if (!matchesSearch) return false;
+
+        if (filterValue === 'ALL') return true;
+        if (filterValue === 'COMPLETED') return Number(item.progress) === 100;
+        if (filterValue === 'INCOMPLETE') return Number(item.progress) < 100;
+        return Number(item.progress) === Number(filterValue);
+      });
+
+      // Urutkan data
+      filtered.sort((a, b) => {
+        if (sortValue === 'EXPORT_ASC') {
+          return a.exportDate.localeCompare(b.exportDate);
+        }
+        if (sortValue === 'PROGRESS_DESC') {
+          return Number(b.progress) - Number(a.progress);
+        }
+        if (sortValue === 'PROGRESS_ASC') {
+          return Number(a.progress) - Number(b.progress);
+        }
+        if (sortValue === 'UPDATED_DESC') {
+          return b.id.localeCompare(a.id);
+        }
+        return 0;
+      });
+
+      const tbody = document.getElementById('sampleTableBody');
+      const emptyState = document.getElementById('emptyState');
+      document.getElementById('tableResultCounter').textContent = `Menampilkan ${filtered.length} dari ${sampleList.length} style`;
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+
+      tbody.innerHTML = filtered.map(item => {
+        const stage = getStageInfo(item.progress);
+        const dateMeta = getExportDateMeta(item.exportDate, item.progress);
+        const isDone = Number(item.progress) === 100;
+
+        return `
+          <tr class="hover:bg-slate-50/80 transition group">
+            <!-- Kode Style -->
+            <td class="py-3.5 px-4 align-top">
+              <span class="inline-flex items-center px-2.5 py-1 rounded-lg font-mono text-xs font-bold bg-slate-900 text-white tracking-wide">
+                ${escapeHtml(item.styleCode)}
+              </span>
+            </td>
+
+            <!-- Buyer & Deskripsi -->
+            <td class="py-3.5 px-4 align-top max-w-xs">
+              <div class="font-bold text-slate-900 text-xs uppercase tracking-wide">${escapeHtml(item.buyer)}</div>
+              <div class="text-slate-700 font-medium text-sm mt-0.5">${escapeHtml(item.description)}</div>
+              ${item.note ? `<div class="text-[11px] text-slate-500 mt-1 line-clamp-1" title="${escapeHtml(item.note)}">Catatan: ${escapeHtml(item.note)}</div>` : ''}
+            </td>
+
+            <!-- Qty -->
+            <td class="py-3.5 px-3 align-top text-right tabular-nums">
+              <span class="font-bold text-slate-800">${Number(item.qty).toLocaleString('id-ID')}</span>
+              <span class="text-xs text-slate-400 block">pcs</span>
+            </td>
+
+            <!-- Jadwal Ekspor -->
+            <td class="py-3.5 px-4 align-top">
+              <div class="font-semibold text-slate-800 text-xs tabular-nums">${dateMeta.formattedDate}</div>
+              <span class="inline-flex items-center mt-1 px-2 py-0.5 rounded-md text-[11px] border ${dateMeta.badgeClass}">
+                ${dateMeta.badgeText}
+              </span>
+            </td>
+
+            <!-- Tahapan Saat Ini -->
+            <td class="py-3.5 px-4 align-top">
+              <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold border ${stage.badgeClass}">
+                ${stage.name}
+              </span>
+            </td>
+
+            <!-- Progress Bar + Angka Persentase -->
+            <td class="py-3.5 px-4 align-top">
+              <div class="flex items-center justify-between text-xs mb-1.5">
+                <span class="font-bold tabular-nums ${isDone ? 'text-emerald-700' : 'text-slate-800'}">${item.progress}%</span>
+                <span class="text-[11px] text-slate-400">${isDone ? 'Lengkap' : 'Proses'}</span>
+              </div>
+              <div class="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200/60">
+                <div class="h-full ${stage.barClass} rounded-full transition-all duration-300" style="width: ${item.progress}%"></div>
+              </div>
+            </td>
+
+            <!-- Status Selesai / Belum Selesai -->
+            <td class="py-3.5 px-3 align-top">
+              ${isDone
+                ? `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+                     <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span> Selesai
+                   </span>`
+                : `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+                     <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Belum Selesai
+                   </span>`
+              }
+            </td>
+
+            <!-- Waktu Update -->
+            <td class="py-3.5 px-4 align-top text-xs text-slate-500 tabular-nums whitespace-nowrap">
+              ${escapeHtml(item.updatedAt)}
+            </td>
+
+            <!-- Tombol Aksi Cepat -->
+            <td class="py-3.5 px-4 align-top text-right whitespace-nowrap">
+              <div class="inline-flex items-center justify-end gap-1.5">
+                <button
+                  type="button"
+                  onclick="openSewingModal('${item.id}')"
+                  class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 transition cursor-pointer"
+                  title="Update progress tahapan sewing & quality"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  <span>Update Sewing</span>
+                </button>
+                <button
+                  type="button"
+                  onclick="confirmDeleteSample('${item.id}')"
+                  class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                  title="Hapus Kode Style"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    /**
+     * Reset filter & pencarian
+     */
+    function resetFilters() {
+      document.getElementById('searchInput').value = '';
+      document.getElementById('filterStageSelect').value = 'ALL';
+      document.getElementById('sortSelect').value = 'EXPORT_ASC';
+      renderDashboard();
+    }
+
+    /**
+     * =====================================================================
+     * MODAL & LOGIKA INPUT CUTTING (5%)
+     * =====================================================================
+     */
+    function openCuttingModal() {
+      document.getElementById('cuttingForm').reset();
+      document.getElementById('cutStyleError').classList.add('hidden');
+      // Default jadwal ekspor 7 hari dari hari ini agar memudahkan input
+      document.getElementById('cutExportDate').value = getRelativeDateString(7);
+      openModal('cuttingModal');
+      setTimeout(() => document.getElementById('cutStyleCode').focus(), 100);
+    }
+
+    function handleCuttingSubmit(event) {
+      event.preventDefault();
+      const styleInput = document.getElementById('cutStyleCode');
+      const styleCode = styleInput.value.trim().toUpperCase();
+      const buyer = document.getElementById('cutBuyer').value.trim().toUpperCase();
+      const description = document.getElementById('cutDescription').value.trim();
+      const qty = parseInt(document.getElementById('cutQty').value, 10);
+      const exportDate = document.getElementById('cutExportDate').value;
+      const note = document.getElementById('cutNote').value.trim();
+
+      // Validasi Kode Style unik
+      const isDuplicate = sampleList.some(item => item.styleCode.toUpperCase() === styleCode);
+      if (isDuplicate) {
+        document.getElementById('cutStyleError').classList.remove('hidden');
+        styleInput.focus();
+        return;
+      }
+
+      const newSample = {
+        id: 'smp-' + Date.now(),
+        styleCode,
+        buyer,
+        description,
+        qty: isNaN(qty) || qty < 1 ? 1 : qty,
+        exportDate,
+        progress: 5, // Otomatis 5% setelah input bagian Cutting
+        note: note || 'Input awal dari bagian Cutting (5%)',
+        updatedAt: formatNowTimestamp(0)
+      };
+
+      sampleList.unshift(newSample);
+      saveSamples();
+      renderDashboard();
+      closeModal('cuttingModal');
+      showToast(`Kode Style ${styleCode} berhasil ditambahkan (Cutting 5%)`, 'success');
+    }
+
+    /**
+     * =====================================================================
+     * MODAL & LOGIKA UPDATE SEWING SUPERVISOR (5% - 100%)
+     * =====================================================================
+     */
+    function openSewingModal(preselectedId = null) {
+      if (sampleList.length === 0) {
+        showToast('Belum ada data Kode Style. Silakan input dari bagian Cutting terlebih dahulu.', 'warning');
+        return;
+      }
+
+      const selectEl = document.getElementById('sewStyleSelect');
+      selectEl.innerHTML = sampleList.map(item => `
+        <option value="${item.id}">
+          ${escapeHtml(item.styleCode)} — ${escapeHtml(item.buyer)} (${item.progress}% • ${getStageInfo(item.progress).name})
+        </option>
+      `).join('');
+
+      if (preselectedId) {
+        selectEl.value = preselectedId;
+      }
+
+      onSelectSewingStyle();
+      openModal('sewingModal');
+    }
+
+    function onSelectSewingStyle() {
+      const selectedId = document.getElementById('sewStyleSelect').value;
+      const sample = sampleList.find(s => s.id === selectedId);
+      if (!sample) return;
+
+      const dateMeta = getExportDateMeta(sample.exportDate, sample.progress);
+      const currentStage = getStageInfo(sample.progress);
+
+      // Update Preview Info Box
+      document.getElementById('sewStylePreview').innerHTML = `
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <span class="font-bold text-slate-900">${escapeHtml(sample.buyer)}</span> •
+            <span class="text-slate-700">${escapeHtml(sample.description)}</span>
+          </div>
+          <span class="font-mono font-bold text-indigo-700">${sample.qty} Pcs</span>
+        </div>
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-1 text-slate-500">
+          <span>Jadwal Ekspor: <strong class="text-slate-700">${dateMeta.formattedDate}</strong> (${dateMeta.badgeText})</span>
+          <span>Saat ini: <strong class="text-slate-800">${currentStage.shortName}</strong></span>
+        </div>
+      `;
+
+      // Render Kartu Radio Pilihan Tahapan (5% - 100%)
+      const container = document.getElementById('stageRadioContainer');
+      container.innerHTML = PRODUCTION_STAGES.map(stage => {
+        const isChecked = Number(sample.progress) === stage.percent;
+        return `
+          <label class="relative flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition select-none ${
+            isChecked
+              ? 'border-indigo-600 bg-indigo-50/70 ring-1 ring-indigo-600'
+              : 'border-slate-200 bg-white hover:bg-slate-50'
+          }">
+            <input
+              type="radio"
+              name="sewingStagePercent"
+              value="${stage.percent}"
+              ${isChecked ? 'checked' : ''}
+              onchange="highlightSelectedStageRadio()"
+              class="mt-0.5 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+            />
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-1">
+                <span class="text-xs font-bold text-slate-900">${stage.name}</span>
+                <span class="px-1.5 py-0.5 rounded text-[11px] font-extrabold tabular-nums ${
+                  stage.percent === 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'
+                }">${stage.percent}%</span>
+              </div>
+              <p class="text-[11px] text-slate-500 mt-0.5 leading-snug">${stage.desc}</p>
+            </div>
+          </label>
+        `;
+      }).join('');
+
+      document.getElementById('sewNote').value = sample.note || '';
+    }
+
+    function highlightSelectedStageRadio() {
+      const radios = document.querySelectorAll('input[name="sewingStagePercent"]');
+      radios.forEach(radio => {
+        const card = radio.closest('label');
+        if (radio.checked) {
+          card.className = 'relative flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition select-none border-indigo-600 bg-indigo-50/70 ring-1 ring-indigo-600';
+        } else {
+          card.className = 'relative flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition select-none border-slate-200 bg-white hover:bg-slate-50';
+        }
+      });
+    }
+
+    function handleSewingSubmit(event) {
+      event.preventDefault();
+      const selectedId = document.getElementById('sewStyleSelect').value;
+      const selectedRadio = document.querySelector('input[name="sewingStagePercent"]:checked');
+      const note = document.getElementById('sewNote').value.trim();
+
+      if (!selectedId || !selectedRadio) return;
+
+      const newPercent = Number(selectedRadio.value);
+      const index = sampleList.findIndex(s => s.id === selectedId);
+      if (index === -1) return;
+
+      const stageInfo = getStageInfo(newPercent);
+      sampleList[index].progress = newPercent;
+      sampleList[index].note = note;
+      sampleList[index].updatedAt = formatNowTimestamp(0);
+
+      saveSamples();
+      renderDashboard();
+      closeModal('sewingModal');
+      showToast(
+        `Progress ${sampleList[index].styleCode} diperbarui ke ${newPercent}% (${stageInfo.name})`,
+        newPercent === 100 ? 'success' : 'info'
+      );
+    }
+
+    /**
+     * =====================================================================
+     * HAPUS & RESET DATA (DENGAN MODAL KONFIRMASI KUSTOM)
+     * =====================================================================
+     */
+    function confirmDeleteSample(id) {
+      const target = sampleList.find(s => s.id === id);
+      if (!target) return;
+
+      document.getElementById('confirmTitle').textContent = `Hapus Kode Style ${target.styleCode}?`;
+      document.getElementById('confirmMessage').textContent =
+        `Data sample "${target.description}" (${target.buyer}) akan dihapus permanen dari dashboard.`;
+
+      const actionBtn = document.getElementById('confirmActionBtn');
+      actionBtn.textContent = 'Ya, Hapus Style';
+      actionBtn.onclick = () => {
+        sampleList = sampleList.filter(s => s.id !== id);
+        saveSamples();
+        renderDashboard();
+        closeModal('confirmModal');
+        showToast(`Kode Style ${target.styleCode} telah dihapus`, 'info');
+      };
+
+      openModal('confirmModal');
+    }
+
+    function openResetModal() {
+      document.getElementById('confirmTitle').textContent = 'Reset ke Data Contoh Awal?';
+      document.getElementById('confirmMessage').textContent =
+        'Semua perubahan saat ini akan diganti dengan 8 data contoh Kode Style bawaan sistem.';
+
+      const actionBtn = document.getElementById('confirmActionBtn');
+      actionBtn.textContent = 'Ya, Reset Data';
+      actionBtn.onclick = () => {
+        sampleList = createInitialSeedData();
+        saveSamples();
+        resetFilters();
+        closeModal('confirmModal');
+        showToast('Data berhasil dikembalikan ke data contoh awal', 'success');
+      };
+
+      openModal('confirmModal');
+    }
+
+    /**
+     * =====================================================================
+     * FITUR DOWNLOAD EXCEL (.XLSX) MENGGUNAKAN SHEETJS
+     * =====================================================================
+     */
+    function exportToExcel() {
+      if (typeof XLSX === 'undefined') {
+        showToast('Library Excel sedang dimuat, silakan coba beberapa detik lagi.', 'warning');
+        return;
+      }
+
+      if (sampleList.length === 0) {
+        showToast('Tidak ada data untuk diunduh ke Excel.', 'warning');
+        return;
+      }
+
+      // 1. Siapkan Sheet 1: "Progress Sample"
+      const sortedForExport = [...sampleList].sort((a, b) => a.exportDate.localeCompare(b.exportDate));
+      const progressRows = sortedForExport.map((item, idx) => {
+        const stage = getStageInfo(item.progress);
+        const dateMeta = getExportDateMeta(item.exportDate, item.progress);
+        return {
+          'No': idx + 1,
+          'Kode Style': item.styleCode,
+          'Buyer / Brand': item.buyer,
+          'Deskripsi Style': item.description,
+          'Qty Sample (Pcs)': Number(item.qty),
+          'Jadwal Ekspor': dateMeta.formattedDate,
+          'Status Jadwal': dateMeta.badgeText,
+          'Tahapan Saat Ini': stage.name,
+          'Progress (%)': Number(item.progress),
+          'Status Penyelesaian': Number(item.progress) === 100 ? 'Selesai (Approved)' : 'Belum Selesai',
+          'Catatan Supervisor': item.note || '-',
+          'Terakhir Update': item.updatedAt
+        };
+      });
+
+      const wsProgress = XLSX.utils.json_to_sheet(progressRows);
+      wsProgress['!cols'] = [
+        { wch: 5 },  // No
+        { wch: 16 }, // Kode Style
+        { wch: 15 }, // Buyer
+        { wch: 36 }, // Deskripsi
+        { wch: 16 }, // Qty
+        { wch: 16 }, // Jadwal Ekspor
+        { wch: 18 }, // Status Jadwal
+        { wch: 24 }, // Tahapan
+        { wch: 14 }, // Progress %
+        { wch: 20 }, // Status Penyelesaian
+        { wch: 38 }, // Catatan
+        { wch: 22 }  // Terakhir Update
+      ];
+
+      // 2. Siapkan Sheet 2: "Resume"
+      const totalStyles = sampleList.length;
+      const totalQty = sampleList.reduce((sum, s) => sum + Number(s.qty || 0), 0);
+      const completed = sampleList.filter(s => Number(s.progress) === 100);
+      const pending = sampleList.filter(s => Number(s.progress) < 100);
+      const completedQty = completed.reduce((sum, s) => sum + Number(s.qty || 0), 0);
+      const pendingQty = pending.reduce((sum, s) => sum + Number(s.qty || 0), 0);
+
+      const completedPct = totalStyles > 0 ? ((completed.length / totalStyles) * 100).toFixed(1) + '%' : '0.0%';
+      const pendingPct = totalStyles > 0 ? ((pending.length / totalStyles) * 100).toFixed(1) + '%' : '0.0%';
+
+      const nearestCandidates = pending.length > 0 ? pending : sampleList;
+      const nearest = [...nearestCandidates].sort((a, b) => a.exportDate.localeCompare(b.exportDate))[0];
+      const nearestMeta = nearest ? getExportDateMeta(nearest.exportDate, nearest.progress) : null;
+
+      const resumeData = [
+        ['LAPORAN RESUME PROGRESS SAMPLE ROOM'],
+        ['Waktu Unduh Laporan', formatNowTimestamp(0)],
+        [],
+        ['RINGKASAN STATUS SAMPLE', 'Jumlah Style', 'Persentase Style', 'Total Qty (Pcs)'],
+        ['Total Kode Style Terdaftar', totalStyles, '100.0%', totalQty],
+        ['Sample Selesai (100% Quality Approved)', completed.length, completedPct, completedQty],
+        ['Sample Belum Selesai (<100% WIP)', pending.length, pendingPct, pendingQty],
+        [],
+        ['JADWAL EKSPOR TERDEKAT', 'Keterangan'],
+        ['Kode Style', nearest ? `${nearest.styleCode} (${nearest.buyer})` : '-'],
+        ['Deskripsi Style', nearest ? nearest.description : '-'],
+        ['Tanggal Ekspor', nearestMeta ? `${nearestMeta.formattedDate} (${nearestMeta.badgeText})` : '-'],
+        ['Progress Saat Ini', nearest ? `${nearest.progress}% — ${getStageInfo(nearest.progress).name}` : '-'],
+        [],
+        ['RINCIAN PER TAHAPAN PRODUKSI', 'Persentase', 'Jumlah Style', 'Total Qty (Pcs)'],
+        ...PRODUCTION_STAGES.map(st => {
+          const itemsInStage = sampleList.filter(s => Number(s.progress) === st.percent);
+          const qtyInStage = itemsInStage.reduce((sum, s) => sum + Number(s.qty || 0), 0);
+          return [st.name, `${st.percent}%`, itemsInStage.length, qtyInStage];
+        })
+      ];
+
+      const wsResume = XLSX.utils.aoa_to_sheet(resumeData);
+      wsResume['!cols'] = [
+        { wch: 38 },
+        { wch: 24 },
+        { wch: 20 },
+        { wch: 20 }
+      ];
+
+      // Buat Workbook dan Unduh File
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, wsProgress, 'Progress Sample');
+      XLSX.utils.book_append_sheet(wb, wsResume, 'Resume');
+
+      const todayStr = getRelativeDateString(0);
+      const fileName = `Laporan_Sample_Room_${todayStr}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+
+      showToast(`File Excel "${fileName}" berhasil diunduh!`, 'success');
+    }
+
+    /**
+     * =====================================================================
+     * UTILITAS MODAL, TOAST & ESCAPE HTML
+     * =====================================================================
+     */
+    function openModal(id) {
+      const modal = document.getElementById(id);
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeModal(id) {
+      const modal = document.getElementById(id);
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    // Tutup modal jika user klik di luar area konten modal (backdrop)
+    window.addEventListener('click', (e) => {
+      ['cuttingModal', 'sewingModal', 'confirmModal'].forEach(id => {
+        const modal = document.getElementById(id);
+        if (e.target === modal) {
+          closeModal(id);
+        }
+      });
+    });
+
+    // Tutup modal dengan tombol Escape
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        ['cuttingModal', 'sewingModal', 'confirmModal'].forEach(closeModal);
+      }
+    });
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+
+      const styles = {
+        success: 'bg-slate-900 text-white border-emerald-500',
+        info: 'bg-slate-900 text-white border-indigo-500',
+        warning: 'bg-amber-900 text-amber-50 border-amber-400'
+      };
+
+      const dotColors = {
+        success: 'bg-emerald-400',
+        info: 'bg-indigo-400',
+        warning: 'bg-amber-400'
+      };
+
+      toast.className = `pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl border-l-4 text-xs sm:text-sm font-medium animate-toast max-w-sm ${styles[type] || styles.info}`;
+      toast.innerHTML = `
+        <span class="w-2 h-2 rounded-full shrink-0 ${dotColors[type] || dotColors.info}"></span>
+        <span>${escapeHtml(message)}</span>
+      `;
+
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(8px)';
+        toast.style.transition = 'all 0.25s ease';
+        setTimeout(() => toast.remove(), 260);
+      }, 3400);
+    }
+
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function updateLiveDateBadge() {
+      const now = new Date();
+      const options = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+      document.getElementById('liveDateBadge').textContent = now.toLocaleDateString('id-ID', options);
+    }
+
+    // Inisialisasi Aplikasi saat halaman dimuat
+    window.addEventListener('DOMContentLoaded', () => {
+      updateLiveDateBadge();
+      loadSamples();
+      renderDashboard();
+    });
+  </script>
+</body>
+</html>
